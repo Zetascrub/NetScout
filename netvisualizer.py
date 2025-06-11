@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 # === Globals ===
 GRAPH_LOCK = threading.Lock()
 GRAPH = nx.Graph()
+POS: Dict[str, Tuple[float, float]] = {}
 COMMON_PORTS = [22, 80, 443]
 
 
@@ -91,14 +92,22 @@ def scan_subnet(subnet: str, iface: str) -> List[Tuple[str, str | None]]:
 
 
 def update_graph() -> None:
-    """Continuously update the matplotlib visualisation."""
+    """Continuously update the matplotlib visualisation with stable positions."""
+    global POS
     while True:
         with GRAPH_LOCK:
-            plt.clf()
-            pos = nx.spring_layout(GRAPH)
-            labels = nx.get_node_attributes(GRAPH, "label")
-            nx.draw(GRAPH, pos, with_labels=True, node_color="skyblue", node_size=1500)
-            nx.draw_networkx_labels(GRAPH, pos, labels)
+            if len(GRAPH) == 0:
+                pass
+            else:
+                plt.clf()
+                layout_args = {"seed": 42}
+                if POS:
+                    layout_args.update({"pos": POS, "fixed": POS.keys()})
+                POS = nx.spring_layout(GRAPH, **layout_args)
+                labels = nx.get_node_attributes(GRAPH, "label")
+                nx.draw(GRAPH, POS, with_labels=False, node_color="skyblue", node_size=1500)
+                for node, (x, y) in POS.items():
+                    plt.text(x, y - 0.08, labels.get(node, node), ha="center")
         plt.pause(2)
 
 
