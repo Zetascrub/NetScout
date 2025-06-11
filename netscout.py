@@ -144,6 +144,38 @@ def format_subnet_summary(results):
     return "\n".join(summary)
 
 
+def format_reachable_summary(results, order=None):
+    lines = [
+        "## Reachable Hosts Summary",
+        "",
+        "| Host | ICMP | TCP (Ports) | HTTP | HTTPS |",
+        "|------|------|-------------|------|-------|",
+    ]
+    host_iter = order if order is not None else results.keys()
+    for host in host_iter:
+        data = results[host]
+        if (
+            data["icmp"]
+            or any(data["tcp"].values())
+            or data["http"]
+            or data["https"]
+        ):
+            icmp_status = "✅" if data["icmp"] else "❌"
+            tcp_summary = ", ".join(
+                f"{port}:✅" if state else f"{port}:❌" for port, state in data["tcp"].items()
+            )
+            http_status = "✅" if data["http"] else "❌"
+            https_status = "✅" if data["https"] else "❌"
+            lines.append(
+                f"| {host} | {icmp_status} | {tcp_summary} | {http_status} | {https_status} |"
+            )
+
+    if len(lines) == 4:
+        lines.append("| _No reachable hosts detected_ | - | - | - | - |")
+
+    return "\n".join(lines)
+
+
 def enhance_with_ollama(report, ollama_url):
     try:
         response = requests.post(
@@ -263,8 +295,9 @@ def main():
     display_terminal_table(ordered_results, args.ports, order=targets)
 
     report = format_report(ordered_results, order=targets)
+    reachable_summary = format_reachable_summary(ordered_results, order=targets)
     subnet_summary = format_subnet_summary(ordered_results)
-    full_report = report + "\n\n" + subnet_summary
+    full_report = report + "\n\n" + reachable_summary + "\n\n" + subnet_summary
 
     if args.ollama:
         full_report = enhance_with_ollama(full_report, args.ollama)
