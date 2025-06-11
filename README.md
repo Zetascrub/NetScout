@@ -28,3 +28,16 @@ python3 netscout.py 192.168.1.0/24 --ports 22 80 443
 ```
 
 This will test each host in the subnet for ICMP reachability, TCP ports 22/80/443 and web accessibility over HTTP and HTTPS.
+
+## Network Visualizer
+
+`netvisualizer.py` performs a quick scan of the local subnets on selected
+network interfaces and shows the discovered hosts in a live diagram.
+
+```bash
+python3 netvisualizer.py            # interactively choose interfaces
+python3 netvisualizer.py --interface eth0 wlan0  # specify interfaces
+```
+
+A window will open displaying the network graph and will refresh as hosts
+are found. Press <Enter> in the terminal to close the diagram when finished.
