@@ -97,11 +97,12 @@ def update_graph() -> None:
     while True:
         with GRAPH_LOCK:
             plt.clf()
-            POS = nx.spring_layout(GRAPH, pos=POS, fixed=POS.keys(), seed=42)
-            labels = nx.get_node_attributes(GRAPH, "label")
-            nx.draw(GRAPH, POS, with_labels=False, node_color="skyblue", node_size=1500)
-            for node, (x, y) in POS.items():
-                plt.text(x, y - 0.08, labels.get(node, node), ha="center")
+            if GRAPH.number_of_nodes() > 0:
+                POS = nx.spring_layout(GRAPH, pos=POS or None, fixed=POS.keys() if POS else None, seed=42)
+                labels = nx.get_node_attributes(GRAPH, "label")
+                nx.draw(GRAPH, POS, with_labels=False, node_color="skyblue", node_size=1500)
+                for node, (x, y) in POS.items():
+                    plt.text(x, y - 0.08, labels.get(node, node), ha="center")
         plt.pause(2)
 
 
