@@ -8,6 +8,11 @@ NetScout is a lightweight Python tool for verifying basic network reachability. 
 
 Results are displayed in a rich terminal table and a Markdown report is produced. Optionally the report can be enhanced via an Ollama server.
 
+The Markdown report now also includes:
+
+* A summary table listing only hosts that responded to at least one check
+* A subnet reachability summary table
+
 ## Usage
 
 ```bash
