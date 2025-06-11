@@ -4,7 +4,6 @@ NetScout is a lightweight Python tool for verifying basic network reachability. 
 
 * ICMP ping
 * TCP connectivity on selected ports
-* UDP probes on selected ports
 * HTTP and HTTPS requests
 
 Results are displayed in a rich terminal table and a Markdown report is produced. Optionally the report can be enhanced via an Ollama server.
@@ -12,7 +11,7 @@ Results are displayed in a rich terminal table and a Markdown report is produced
 ## Usage
 
 ```bash
-python3 netscout.py <target> [--ports 22 80] [--udp-ports 53 123]
+python3 netscout.py <target> [--ports 22 80]
 ```
 
 Targets may be single hosts, CIDR ranges or a file containing one target per line.
@@ -20,7 +19,7 @@ Targets may be single hosts, CIDR ranges or a file containing one target per lin
 ## Example
 
 ```bash
-python3 netscout.py 192.168.1.0/24 --ports 22 80 443 --udp-ports 53
+python3 netscout.py 192.168.1.0/24 --ports 22 80 443
 ```
 
-This will test each host in the subnet for ICMP reachability, TCP ports 22/80/443, UDP port 53 and web accessibility over HTTP and HTTPS.
+This will test each host in the subnet for ICMP reachability, TCP ports 22/80/443 and web accessibility over HTTP and HTTPS.

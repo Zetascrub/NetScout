@@ -10,12 +10,10 @@ import subprocess
 import socket
 import requests
 import concurrent.futures
-import time
 from collections import defaultdict
 import urllib3
 
 DEFAULT_TCP_PORTS = [22, 80, 443, 445, 3389]
-DEFAULT_UDP_PORTS = [53, 123]
 console = Console()
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -64,20 +62,6 @@ def check_tcp_port(host, port):
         return False
 
 
-def check_udp_port(host, port):
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.settimeout(1)
-            s.sendto(b"", (host, port))
-            # attempt to receive a response; timeout implies port open/filtered
-            s.recvfrom(1024)
-        return True
-    except socket.timeout:
-        return True
-    except Exception:
-        return False
-
-
 def check_http(host):
     try:
         response = requests.get(f"http://{host}", timeout=2)
@@ -100,21 +84,18 @@ def format_report(results):
     report = [
         "# Network Segmentation Test Summary",
         "",
-        "| Host | ICMP | TCP (Ports) | UDP (Ports) | HTTP | HTTPS |",
-        "|------|------|-------------|-------------|------|-------|"
+        "| Host | ICMP | TCP (Ports) | HTTP | HTTPS |",
+        "|------|------|-------------|------|-------|"
     ]
     for host, data in results.items():
         icmp_status = "✅" if data["icmp"] else "❌"
         tcp_summary = ", ".join(
             f"{port}:✅" if state else f"{port}:❌" for port, state in data["tcp"].items()
         )
-        udp_summary = ", ".join(
-            f"{port}:✅" if state else f"{port}:❌" for port, state in data["udp"].items()
-        )
         http_status = "✅" if data["http"] else "❌"
         https_status = "✅" if data["https"] else "❌"
         report.append(
-            f"| {host} | {icmp_status} | {tcp_summary} | {udp_summary} | {http_status} | {https_status} |"
+            f"| {host} | {icmp_status} | {tcp_summary} | {http_status} | {https_status} |"
         )
     return "\n".join(report)
 
@@ -128,7 +109,6 @@ def format_subnet_summary(results):
             if (
                 data["icmp"]
                 or any(data["tcp"].values())
-                or any(data["udp"].values())
                 or data["http"]
                 or data["https"]
             ):
@@ -176,8 +156,8 @@ def enhance_with_ollama(report, ollama_url):
         return report
 
 
-def test_host(host, tcp_ports, udp_ports, progress=None, task_id=None):
-    result = {"icmp": False, "tcp": {}, "udp": {}, "http": False, "https": False}
+def test_host(host, tcp_ports, progress=None, task_id=None):
+    result = {"icmp": False, "tcp": {}, "http": False, "https": False}
 
     if progress is not None:
         progress.update(task_id, description=f"{host} - ICMP")
@@ -192,12 +172,6 @@ def test_host(host, tcp_ports, udp_ports, progress=None, task_id=None):
         if progress is not None:
             progress.advance(task_id)
 
-    for port in udp_ports:
-        if progress is not None:
-            progress.update(task_id, description=f"{host} - UDP {port}")
-        result["udp"][port] = check_udp_port(host, port)
-        if progress is not None:
-            progress.advance(task_id)
 
     if progress is not None:
         progress.update(task_id, description=f"{host} - HTTP")
@@ -214,14 +188,12 @@ def test_host(host, tcp_ports, udp_ports, progress=None, task_id=None):
     return host, result
 
 
-def display_terminal_table(results, tcp_ports, udp_ports):
+def display_terminal_table(results, tcp_ports):
     table = Table(title="Network Segmentation Reachability Results")
     table.add_column("Host", style="cyan", no_wrap=True)
     table.add_column("ICMP", justify="center")
     for port in tcp_ports:
         table.add_column(f"TCP {port}", justify="center")
-    for port in udp_ports:
-        table.add_column(f"UDP {port}", justify="center")
     table.add_column("HTTP", justify="center")
     table.add_column("HTTPS", justify="center")
 
@@ -230,8 +202,6 @@ def display_terminal_table(results, tcp_ports, udp_ports):
         row.append("✅" if data["icmp"] else "❌")
         for port in tcp_ports:
             row.append("✅" if data["tcp"].get(port) else "❌")
-        for port in udp_ports:
-            row.append("✅" if data["udp"].get(port) else "❌")
         row.append("✅" if data["http"] else "❌")
         row.append("✅" if data["https"] else "❌")
         table.add_row(*row)
@@ -250,20 +220,13 @@ def main():
         default=DEFAULT_TCP_PORTS,
         help="List of TCP ports to check (default: 22, 80, 443, 445, 3389)",
     )
-    parser.add_argument(
-        "--udp-ports",
-        nargs="+",
-        type=int,
-        default=DEFAULT_UDP_PORTS,
-        help="List of UDP ports to check (default: 53, 123)",
-    )
     args = parser.parse_args()
 
     targets = parse_targets(args.target)
     console.print(f"[bold green][+] Total targets parsed: {len(targets)}[/]")
 
     results = {}
-    total_steps = len(targets) * (1 + len(args.ports) + len(args.udp_ports) + 2)
+    total_steps = len(targets) * (1 + len(args.ports) + 2)
 
     progress_columns = [
         SpinnerColumn(),
@@ -278,14 +241,14 @@ def main():
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
             future_to_host = {
-                executor.submit(test_host, host, args.ports, args.udp_ports, progress, task_id): host
+                executor.submit(test_host, host, args.ports, progress, task_id): host
                 for host in targets
             }
             for future in concurrent.futures.as_completed(future_to_host):
                 host, result = future.result()
                 results[host] = result
 
-    display_terminal_table(results, args.ports, args.udp_ports)
+    display_terminal_table(results, args.ports)
 
     report = format_report(results)
     subnet_summary = format_subnet_summary(results)
