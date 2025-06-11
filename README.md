@@ -32,7 +32,10 @@ This will test each host in the subnet for ICMP reachability, TCP ports 22/80/44
 ## Network Visualizer
 
 `netvisualizer.py` performs a quick scan of the local subnets on selected
-network interfaces and shows the discovered hosts in a live diagram.
+network interfaces and shows the discovered hosts in a hierarchical diagram.
+The gateway is placed at the top with each host arranged on tiers matching the
+`traceroute` path. Clicking a node reveals its IP address, hostname and any
+open common ports.
 
 ```bash
 python3 netvisualizer.py            # interactively choose interfaces
