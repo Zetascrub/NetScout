@@ -20,28 +20,34 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 def parse_targets(target):
-    targets = set()
-    if os.path.isfile(target):
-        with open(target, 'r') as f:
-            lines = f.readlines()
-        for line in lines:
-            targets.update(parse_targets(line.strip()))
-    else:
-        try:
-            network = ipaddress.ip_network(target, strict=False)
-            for ip in network.hosts():
-                targets.add(str(ip))
-        except ValueError:
+    """Parse a target into a deterministic ordered list of hosts."""
+    collected = []
+
+    def _parse(entry):
+        if os.path.isfile(entry):
+            with open(entry, "r") as f:
+                for line in f:
+                    _parse(line.strip())
+        else:
             try:
-                ipaddress.ip_address(target)
-                targets.add(target)
+                network = ipaddress.ip_network(entry, strict=False)
+                for ip in network.hosts():
+                    collected.append(str(ip))
             except ValueError:
                 try:
-                    resolved = socket.gethostbyname(target)
-                    targets.add(resolved)
-                except socket.gaierror:
-                    console.print(f"[bold red][!] Unable to resolve hostname: {target}[/]")
-    return list(targets)
+                    ipaddress.ip_address(entry)
+                    collected.append(entry)
+                except ValueError:
+                    try:
+                        resolved = socket.gethostbyname(entry)
+                        collected.append(resolved)
+                    except socket.gaierror:
+                        console.print(f"[bold red][!] Unable to resolve hostname: {entry}[/]")
+
+    _parse(target)
+
+    # Remove duplicates while preserving order
+    return list(dict.fromkeys(collected))
 
 
 def ping_host(host):
@@ -80,14 +86,16 @@ def check_https(host):
         return False
 
 
-def format_report(results):
+def format_report(results, order=None):
     report = [
         "# Network Segmentation Test Summary",
         "",
         "| Host | ICMP | TCP (Ports) | HTTP | HTTPS |",
         "|------|------|-------------|------|-------|"
     ]
-    for host, data in results.items():
+    host_iter = order if order is not None else results.keys()
+    for host in host_iter:
+        data = results[host]
         icmp_status = "✅" if data["icmp"] else "❌"
         tcp_summary = ", ".join(
             f"{port}:✅" if state else f"{port}:❌" for port, state in data["tcp"].items()
@@ -188,7 +196,7 @@ def test_host(host, tcp_ports, progress=None, task_id=None):
     return host, result
 
 
-def display_terminal_table(results, tcp_ports):
+def display_terminal_table(results, tcp_ports, order=None):
     table = Table(title="Network Segmentation Reachability Results")
     table.add_column("Host", style="cyan", no_wrap=True)
     table.add_column("ICMP", justify="center")
@@ -197,7 +205,9 @@ def display_terminal_table(results, tcp_ports):
     table.add_column("HTTP", justify="center")
     table.add_column("HTTPS", justify="center")
 
-    for host, data in results.items():
+    host_iter = order if order is not None else results.keys()
+    for host in host_iter:
+        data = results[host]
         row = [host]
         row.append("✅" if data["icmp"] else "❌")
         for port in tcp_ports:
@@ -248,10 +258,12 @@ def main():
                 host, result = future.result()
                 results[host] = result
 
-    display_terminal_table(results, args.ports)
+    ordered_results = {host: results.get(host) for host in targets}
 
-    report = format_report(results)
-    subnet_summary = format_subnet_summary(results)
+    display_terminal_table(ordered_results, args.ports, order=targets)
+
+    report = format_report(ordered_results, order=targets)
+    subnet_summary = format_subnet_summary(ordered_results)
     full_report = report + "\n\n" + subnet_summary
 
     if args.ollama:
