@@ -2,6 +2,7 @@
 
 from rich.console import Console
 from rich.table import Table
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
 import argparse
 import ipaddress
 import os
@@ -175,15 +176,41 @@ def enhance_with_ollama(report, ollama_url):
         return report
 
 
-def test_host(host, tcp_ports, udp_ports):
+def test_host(host, tcp_ports, udp_ports, progress=None, task_id=None):
     result = {"icmp": False, "tcp": {}, "udp": {}, "http": False, "https": False}
+
+    if progress is not None:
+        progress.update(task_id, description=f"{host} - ICMP")
     result["icmp"] = ping_host(host)
+    if progress is not None:
+        progress.advance(task_id)
+
     for port in tcp_ports:
+        if progress is not None:
+            progress.update(task_id, description=f"{host} - TCP {port}")
         result["tcp"][port] = check_tcp_port(host, port)
+        if progress is not None:
+            progress.advance(task_id)
+
     for port in udp_ports:
+        if progress is not None:
+            progress.update(task_id, description=f"{host} - UDP {port}")
         result["udp"][port] = check_udp_port(host, port)
+        if progress is not None:
+            progress.advance(task_id)
+
+    if progress is not None:
+        progress.update(task_id, description=f"{host} - HTTP")
     result["http"] = check_http(host)
+    if progress is not None:
+        progress.advance(task_id)
+
+    if progress is not None:
+        progress.update(task_id, description=f"{host} - HTTPS")
     result["https"] = check_https(host)
+    if progress is not None:
+        progress.advance(task_id)
+
     return host, result
 
 
@@ -236,14 +263,27 @@ def main():
     console.print(f"[bold green][+] Total targets parsed: {len(targets)}[/]")
 
     results = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-        future_to_host = {
-            executor.submit(test_host, host, args.ports, args.udp_ports): host
-            for host in targets
-        }
-        for future in concurrent.futures.as_completed(future_to_host):
-            host, result = future.result()
-            results[host] = result
+    total_steps = len(targets) * (1 + len(args.ports) + len(args.udp_ports) + 2)
+
+    progress_columns = [
+        SpinnerColumn(),
+        TextColumn("{task.description}"),
+        BarColumn(),
+        TextColumn("{task.completed}/{task.total}"),
+        TimeElapsedColumn(),
+    ]
+
+    with Progress(*progress_columns, console=console) as progress:
+        task_id = progress.add_task("Starting reachability tests...", total=total_steps)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+            future_to_host = {
+                executor.submit(test_host, host, args.ports, args.udp_ports, progress, task_id): host
+                for host in targets
+            }
+            for future in concurrent.futures.as_completed(future_to_host):
+                host, result = future.result()
+                results[host] = result
 
     display_terminal_table(results, args.ports, args.udp_ports)
 
